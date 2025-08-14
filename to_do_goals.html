@@ -86,7 +86,7 @@
   <div id="warning" class="warning"></div>
 
   <script>
-    const DROPBOX_URL = 'https://www.dropbox.com/scl/fi/dxwuruhm02mqikfub6gzp/cgpt_todo.txt?rlkey=w0qt8rl3uldazven5lsglisvx&st=5d7o4tvq&raw=1'; // Replace with your Dropbox link
+    const DROPBOX_URL = 'https://dl.dropboxusercontent.com/scl/fi/dxwuruhm02mqikfub6gzp/cgpt_todo.txt?rlkey=w0qt8rl3uldazven5lsglisvx&st=5d7o4tvq&raw=1'; // Replace with your direct Dropbox link
     // Parse todo.txt style lines into structured task objects
     // Recognizes optional leading "x" for completed tasks
     // Expected format: (A) Description @context +project due:YYYY-MM-DD time:HH:MM
@@ -266,7 +266,7 @@
       const etag = localStorage.getItem('todoEtag');
       if (etag) headers['If-None-Match'] = etag;
       try {
-        const resp = await fetch(DROPBOX_URL, { headers });
+        const resp = await fetch(DROPBOX_URL, { headers, mode: 'cors' });
         if (resp.status === 200) {
           const content = await resp.text();
           const tasks = parseTasks(content);
