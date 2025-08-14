@@ -39,9 +39,6 @@
     .context-evening { background-color: #2e1534; }
     .context-work { background-color: #1a237e; }
     .context-unitedway { background-color: #004d40; }
-    input[type="file"] {
-      margin: 1em 0;
-    }
     .warning {
       color: #f44336;
       margin-top: 1em;
@@ -57,14 +54,18 @@
     .done-btn:hover {
       background-color: #444;
     }
+    #refreshBtn,
     #exportBtn {
-      margin-left: 0.5em;
       padding: 0.2em 0.4em;
       background-color: #333;
       color: #e0e0e0;
       border: none;
       cursor: pointer;
     }
+    #exportBtn {
+      margin-left: 0.5em;
+    }
+    #refreshBtn:hover,
     #exportBtn:hover {
       background-color: #444;
     }
@@ -79,12 +80,13 @@
 </head>
 <body>
   <h1>🗂️ To Do Goals</h1>
-  <input type="file" id="fileInput" accept=".txt">
+  <button id="refreshBtn">Refresh</button>
   <button id="exportBtn">Export to todo.txt</button>
   <div id="taskList"></div>
   <div id="warning" class="warning"></div>
 
   <script>
+    const DROPBOX_URL = 'https://www.dropbox.com/s/your_shared_link/todo.txt?raw=1'; // Replace with your Dropbox link
     // Parse todo.txt style lines into structured task objects
     // Recognizes optional leading "x" for completed tasks
     // Expected format: (A) Description @context +project due:YYYY-MM-DD time:HH:MM
@@ -241,7 +243,7 @@
       if (swRegistered) sendTasksToWorker(futureTasks);
     }
 
-    // Restore the last uploaded task file from localStorage on load
+    // Render tasks stored in localStorage
     function loadStoredTasks() {
       const stored = localStorage.getItem('lastTasks');
       if (stored) {
@@ -257,25 +259,26 @@
         renderTasks(tasks);
       }
     }
-
-    // Handle file uploads and update localStorage with the latest tasks
-    document.getElementById('fileInput').addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      const container = document.getElementById('taskList');
+    async function loadDropboxTasks() {
       const warning = document.getElementById('warning');
       warning.textContent = '';
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const content = e.target.result;
-        const tasks = parseTasks(content);
-        if (tasks.length === 0) {
-          localStorage.removeItem('lastTasks');
-          container.innerHTML = '';
-          warning.textContent = '⚠️ Could not parse tasks';
-        } else {
+      const headers = {};
+      const etag = localStorage.getItem('todoEtag');
+      if (etag) headers['If-None-Match'] = etag;
+      try {
+        const resp = await fetch(DROPBOX_URL, { headers });
+        if (resp.status === 200) {
+          const content = await resp.text();
+          const tasks = parseTasks(content);
+          if (tasks.length === 0) {
+            localStorage.removeItem('lastTasks');
+            localStorage.removeItem('todoEtag');
+            warning.textContent = '⚠️ Could not parse tasks';
+            return;
+          }
           localStorage.setItem('lastTasks', content);
+          const newEtag = resp.headers.get('ETag');
+          if (newEtag) localStorage.setItem('todoEtag', newEtag);
           const completed = getCompletedTasks();
           tasks.forEach(t => {
             if (t.done) {
@@ -285,15 +288,21 @@
           });
           setCompletedTasks(completed);
           renderTasks(tasks);
+        } else if (resp.status === 304) {
+          loadStoredTasks();
+        } else {
+          warning.textContent = '⚠️ Failed to fetch tasks';
+          localStorage.removeItem('todoEtag');
+          loadStoredTasks();
         }
-      };
-      reader.onerror = function() {
-        localStorage.removeItem('lastTasks');
-        container.innerHTML = '';
-        warning.textContent = '⚠️ Failed to read file';
-      };
-      reader.readAsText(file);
-    });
+      } catch (e) {
+        warning.textContent = '⚠️ Network error while fetching tasks';
+        localStorage.removeItem('todoEtag');
+        loadStoredTasks();
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadDropboxTasks);
 
     document.getElementById('exportBtn').addEventListener('click', function() {
       if (currentTasks.length === 0) return;
@@ -318,7 +327,7 @@
       Notification.requestPermission();
     }
 
-    loadStoredTasks();
+    loadDropboxTasks();
   </script>
 </body>
 </html>
